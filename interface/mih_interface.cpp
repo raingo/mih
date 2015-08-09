@@ -15,7 +15,7 @@
 
 int main (int argc, char**argv) {
     if (argc < 3) {
-	printf("Usage:\n\nmih <infile> <outfile> [options]\n\n");
+	printf("Usage:\n\nmih <database file> <query file> <outfile> [options]\n\n");
 	printf("Options:\n");
 	printf(" -N <number>          Set the number of binary codes from the beginning of the dataset file to be used\n");
 	printf(" -Q <number>          Set the number of query points to use from <infile>, default all\n");
@@ -27,17 +27,18 @@ int main (int argc, char**argv) {
 	return 0;
     }
 
-    char *infile = argv[1];
-    char *outfile = argv[2];
-		
+    char *Dfile = argv[1];
+    char *Qfile = argv[2];
+    char *outfile = argv[3];
+
     UINT32 N = 0;
     UINT32 NQ = 0, Q0 = 0, Q1 = 0;
     int B = 0;
     int m = 1;
     UINT32 K = -1;
     size_t R = 0;
-	
-    for (int argnum = 3; argnum < argc; argnum++) {
+
+    for (int argnum = 4; argnum < argc; argnum++) {
 	if (argv[argnum][0] == '-') {
 	    switch (argv[argnum][1]) {
 	    case 'B':
@@ -68,7 +69,7 @@ int main (int argc, char**argv) {
 	    case 'R':
 		R = atoi(argv[++argnum])*1000000;
 		break;
-	    default: 
+	    default:
 		printf("Unrecognized Option or Missing Parameter when parsing: %s\n", argv[argnum]);
 		return EXIT_FAILURE;
 	    }
@@ -82,7 +83,7 @@ int main (int argc, char**argv) {
     	printf("-Q is required.\n");
     	return EXIT_FAILURE;
     }
-    
+
     if (B % 8 != 0) {		// in case of B == 0 this should be fine
 	printf("Non-multiple of 8 code lengths are not currently supported.\n");
 	return EXIT_FAILURE;
@@ -101,17 +102,17 @@ int main (int argc, char**argv) {
     int B_over_8 = B/8;
     /* Done with initialization and sanity checks */
 
-    /* Loading the codes and queries from the input file */	
+    /* Loading the codes and queries from the input file */
     UINT8 *codes_db;
     int dim1codes;
     UINT8 *codes_query;
     int dim1queries;
-    
+
     printf("Loading codes... ");
     fflush(stdout);
 
     codes_db = (UINT8*)malloc((size_t)N * (B/8) * sizeof(UINT8));
-    load_bin_codes(infile, "B", codes_db, &N, &B_over_8);
+    load_bin_codes(Dfile, "D", codes_db, &N, &B_over_8);
     if (B == 0)
 	B = B_over_8 * 8; /* in this case B_over_8 is set within load_bin_codes */
     dim1codes = B/8;
@@ -121,7 +122,7 @@ int main (int argc, char**argv) {
     fflush(stdout);
 
     codes_query = (UINT8*)malloc((size_t)NQ * (B/8) * sizeof(UINT8));
-    load_bin_codes(infile, "Q", codes_query, &NQ, &B_over_8, Q0);
+    load_bin_codes(Qfile, "D", codes_query, &NQ, &B_over_8, Q0);
     dim1queries = B/8;
 
     printf("done.\n");
@@ -171,9 +172,9 @@ int main (int argc, char**argv) {
     result.stats[0] = (double *) malloc(sizeof(double)*STAT_DIM*NQ);
     for (size_t i=1; i<NQ; i++)
 	result.stats[i] = result.stats[i-1] + STAT_DIM;
-    
+
     MIH = new mihasher(B, m);
-    
+
     if (R) {
 	printf("Computing greedy reordering using %.0e codes... \n", (double)R); fflush(stdout);
 	int * order = new int [B];
@@ -191,35 +192,35 @@ int main (int argc, char**argv) {
 	codes_query = codes_query_R;
 	printf("Done.\n"); fflush(stdout);
     }
-    
+
     printf("Populating %d hashtables with %.0e entries...\n", m, (double)N);
     fflush (stdout);
     start1 = time(NULL);
     start0 = clock();
-    
+
     MIH->populate(codes_db, N, dim1codes);
-	    
+
     end0 = clock();
     end1 = time(NULL);
-    
+
     double ct = (double)(end0-start0) / (CLOCKS_PER_SEC);
     double wt = (double)(end1-start1);
-    
+
     printf("done. | cpu %.0fm%.0fs | wall %.0fm%.0fs\n", ct/60, ct-60*int(ct/60), wt/60, wt-60*int(wt/60));
 
     MIH->setK(K);
 
     printf("query... ");
     fflush (stdout);
-    
+
     start1 = time(NULL);
     start0 = clock();
-    
+
     MIH->batchquery(result.res[0], result.nres[0], stats, codes_query, NQ, dim1queries);
-    
+
     end0 = clock();
     end1 = time(NULL);
-    
+
     result.cput = (double)(end0-start0) / (CLOCKS_PER_SEC) / NQ;
     result.wt = (double)(end1-start1) / NQ;
     process_mem_usage(&result.vm, &result.rss);
@@ -234,7 +235,7 @@ int main (int argc, char**argv) {
     	pstats_d[2] = stats[i].numdups;
     	pstats_d[3] = stats[i].numlookups;
     	pstats_d[4] = stats[i].maxrho;
-    	pstats_d[5] = (double) stats[i].ticks / CLOCKS_PER_SEC;	
+    	pstats_d[5] = (double) stats[i].ticks / CLOCKS_PER_SEC;
     	pstats_d += 6;
     }
 
@@ -244,7 +245,7 @@ int main (int argc, char**argv) {
     printf("done.          \r");
     fflush (stdout);
     /* Done with mulit-index hashing and storing the stats */
-	
+
     /* Opening the output file for writing the results */
     printf("Writing results to file %s... ", outfile);
     fflush(stdout);
